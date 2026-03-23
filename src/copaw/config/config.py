@@ -134,6 +134,21 @@ class WecomConfig(BaseChannelConfig):
     max_reconnect_attempts: int = -1
 
 
+class WechatConfig(BaseChannelConfig):
+    """Wechat channel config over OpenClaw HTTP protocol."""
+
+    base_url: str = ""
+    bot_token: str = ""
+    uin: str = ""
+    poll_timeout_ms: int = 35000
+    request_timeout_ms: int = 15000
+    state_dir: str = ""
+    media_dir: Optional[str] = None
+    cdn_base_url: str = ""
+    max_send_retries: int = 3
+    typing_enabled: bool = True
+
+
 class MatrixConfig(BaseChannelConfig):
     """Matrix channel configuration."""
 
@@ -183,6 +198,7 @@ class ChannelConfig(BaseModel):
     matrix: MatrixConfig = MatrixConfig()
     voice: VoiceChannelConfig = VoiceChannelConfig()
     wecom: WecomConfig = WecomConfig()
+    wechat: WechatConfig = WechatConfig()
     xiaoyi: XiaoYiConfig = XiaoYiConfig()
 
 
@@ -844,6 +860,7 @@ ChannelConfigUnion = Union[
     MatrixConfig,
     VoiceChannelConfig,
     WecomConfig,
+    WechatConfig,
     XiaoYiConfig,
 ]
 
