@@ -18,7 +18,11 @@ router = APIRouter(prefix="/channel", tags=["channel"])
 class SendTextRequest(BaseModel):
     """Send plain text to a channel target identified by session and user."""
 
-    session_id: str = Field(..., min_length=1, description="Session id for the target")
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session id for the target",
+    )
     user_id: str = Field(
         default="",
         description="User id (may be empty for some channels)",
