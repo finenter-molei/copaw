@@ -162,7 +162,11 @@ async def _fetch_qrcode(base_url: str, bot_type: str) -> dict:
     return {"qrcode": qrcode, "qrcode_url": qrcode_url}
 
 
-async def _poll_qrcode_status(base_url: str, qrcode: str, timeout_ms: int) -> dict:
+async def _poll_qrcode_status(
+    base_url: str,
+    qrcode: str,
+    timeout_ms: int,
+) -> dict:
     """Long-poll QR status from upstream."""
     url = f"{base_url}/ilink/bot/get_qrcode_status"
     async with httpx.AsyncClient(

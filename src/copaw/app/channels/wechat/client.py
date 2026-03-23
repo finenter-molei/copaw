@@ -147,7 +147,9 @@ class WechatApiClient:
         )
         upload_param = str(upload_resp.get("upload_param") or "")
         if not upload_param:
-            raise WechatProtocolError("getuploadurl returned empty upload_param")
+            raise WechatProtocolError(
+                "getuploadurl returned empty upload_param",
+            )
 
         upload_url = self._build_cdn_upload_url(
             upload_param=upload_param,
@@ -186,7 +188,9 @@ class WechatApiClient:
         allow_api_error: bool = False,
     ) -> Dict[str, Any]:
         merged_payload = dict(payload)
-        merged_payload["base_info"] = {"channel_version": "python-copaw-wechat"}
+        merged_payload["base_info"] = {
+            "channel_version": "python-copaw-wechat",
+        }
         body = httpx.Request(
             method="POST",
             url=self._base_url,
@@ -213,7 +217,8 @@ class WechatApiClient:
 
         if response.status_code >= 400:
             raise WechatApiError(
-                f"{endpoint} http status={response.status_code} body={response.text[:300]}",
+                f"{endpoint} http status={response.status_code}"
+                f" body={response.text[:300]}",
             )
         try:
             data = response.json()
@@ -249,7 +254,9 @@ class WechatApiClient:
         return base64.b64encode(raw.encode("utf-8")).decode("utf-8")
 
     def _build_cdn_upload_url(self, *, upload_param: str, filekey: str) -> str:
-        if upload_param.startswith("http://") or upload_param.startswith("https://"):
+        if upload_param.startswith("http://") or upload_param.startswith(
+            "https://",
+        ):
             if "filekey=" in upload_param:
                 return upload_param
             sep = "&" if "?" in upload_param else "?"

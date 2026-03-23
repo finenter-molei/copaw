@@ -297,9 +297,12 @@ class WechatChannel(BaseChannel):
                 delay = _RETRY_INITIAL_S
                 errcode = response.get("errcode")
                 if errcode == -14:
-                    # Stale or invalid get_updates_buf (common after restart). Do not
-                    # persist get_updates_buf from this response. Back off to
-                    # avoid a tight loop if the server returns -14 repeatedly.
+                    # Stale or invalid get_updates_buf
+                    # (common after restart). Do not
+                    # persist get_updates_buf from
+                    # this response. Back off to
+                    # avoid a tight loop if
+                    # the server returns -14 repeatedly.
                     consecutive_session_timeout += 1
                     if consecutive_session_timeout == 1:
                         logger.info(
@@ -307,7 +310,8 @@ class WechatChannel(BaseChannel):
                         )
                     else:
                         logger.debug(
-                            "wechat: get_updates_buf still invalid (%s), retry",
+                            "wechat: get_updates_buf still "
+                            "invalid (%s), retry",
                             consecutive_session_timeout,
                         )
                     await self._state.set_get_updates_buf("")
@@ -376,7 +380,8 @@ class WechatChannel(BaseChannel):
             prev = self._state.get_context_token(sender_id) or ""
             if prev and prev != context_token:
                 logger.info(
-                    "wechat inbound token changed sender=%s prev_len=%s new_len=%s",
+                    "wechat inbound token changed"
+                    " sender=%s prev_len=%s new_len=%s",
                     sender_id,
                     len(prev),
                     len(context_token),
@@ -414,7 +419,9 @@ class WechatChannel(BaseChannel):
             raise WechatProtocolError("to_user_id is empty")
 
         meta_token = str((meta or {}).get("context_token") or "").strip()
-        stored_token = (self._state.get_context_token(to_user_id) or "").strip()
+        stored_token = (
+            self._state.get_context_token(to_user_id) or ""
+        ).strip()
         if stored_token:
             context_token = stored_token
             context_source = "state"
@@ -454,7 +461,8 @@ class WechatChannel(BaseChannel):
             },
         }
         logger.info(
-            "wechat outbound payload client_id=%s message_type=%s message_state=%s",
+            "wechat outbound payload client_id=%s"
+            " message_type=%s message_state=%s",
             request_body["msg"]["client_id"],
             request_body["msg"]["message_type"],
             request_body["msg"]["message_state"],
@@ -467,7 +475,9 @@ class WechatChannel(BaseChannel):
                 attempt += 1
                 try:
                     response = await self._client.send_message(request_body)
-                    response_token = str(response.get("context_token") or "").strip()
+                    response_token = str(
+                        response.get("context_token") or "",
+                    ).strip()
                     updated_token = response_token or context_token
                     if updated_token:
                         await self._state.set_context_token(
@@ -546,13 +556,16 @@ class WechatChannel(BaseChannel):
             return None
 
         if candidate.startswith("http://") or candidate.startswith("https://"):
-            filename = Path(candidate.split("?")[0]).name or "remote.bin"
+            filename = (
+                Path(candidate.split("?", maxsplit=1)[0]).name or "remote.bin"
+            )
             target_path = self._media_dir / filename
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(candidate)
             if response.status_code >= 400:
                 raise WechatApiError(
-                    f"failed to fetch remote media: status={response.status_code}",
+                    f"failed to fetch remote media: "
+                    f"status={response.status_code}",
                 )
             target_path.write_bytes(response.content)
             return target_path

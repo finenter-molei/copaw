@@ -170,9 +170,7 @@ export function ChannelDrawer({
         if (res.connected || nextStatus === "confirmed") {
           stopWechatPolling();
           setWechatQrStatus("confirmed");
-          setWechatQrStatusText(
-            res.message || t("channels.wechatQrConfirmed"),
-          );
+          setWechatQrStatusText(res.message || t("channels.wechatQrConfirmed"));
           form.setFieldsValue({ enabled: true });
           try {
             const latest = await api.getChannelConfig("wechat");
@@ -847,7 +845,12 @@ export function ChannelDrawer({
               >
                 {t("channels.wechatAuthHint")}
               </span>
-              <Button type="primary" block onClick={handleWechatQrStart} loading={wechatQrLoading}>
+              <Button
+                type="primary"
+                block
+                onClick={handleWechatQrStart}
+                loading={wechatQrLoading}
+              >
                 {t("channels.loginWechat")}
               </Button>
             </Form.Item>
