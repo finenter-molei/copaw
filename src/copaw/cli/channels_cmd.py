@@ -206,7 +206,7 @@ def configure_imessage(
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -244,7 +244,7 @@ def configure_discord(current_config: DiscordConfig) -> DiscordConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -309,7 +309,7 @@ def configure_dingtalk(current_config: DingTalkConfig) -> DingTalkConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -359,7 +359,7 @@ def configure_feishu(current_config: FeishuConfig) -> FeishuConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -399,7 +399,7 @@ def configure_qq(current_config: QQConfig) -> QQConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -445,7 +445,7 @@ def configure_telegram(current_config: TelegramConfig) -> TelegramConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., @bot)",
-        default=current_config.bot_prefix or "[BOT]",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -621,7 +621,7 @@ def configure_console(current_config: ConsoleConfig) -> ConsoleConfig:
 
     bot_prefix = click.prompt(
         "Bot prefix (e.g., [BOT])",
-        default=current_config.bot_prefix or "[BOT] ",
+        default=current_config.bot_prefix or "",
         type=str,
     )
     current_config.bot_prefix = bot_prefix
@@ -698,7 +698,7 @@ def get_channel_configurators() -> dict:
             "enabled",
             prompt_confirm("Enable this channel?", default=enabled),
         )
-        prefix = _get(current, "bot_prefix", "") or "[BOT]"
+        prefix = _get(current, "bot_prefix", "") or ""
         _set(
             current,
             "bot_prefix",
