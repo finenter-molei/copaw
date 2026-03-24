@@ -8,23 +8,36 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
 from ....config.config import WechatConfig as WechatChannelConfig
 from ....constant import DEFAULT_MEDIA_DIR, WORKING_DIR
 from ..base import (
+    AudioContent,
     BaseChannel,
     ContentType,
+    FileContent,
+    ImageContent,
     OnReplySent,
     OutgoingContentPart,
     ProcessHandler,
+    VideoContent,
 )
 from ..utils import file_url_to_local_path
-from .client import WechatApiClient, WechatApiError, WechatProtocolError
+from .client import (
+    WechatApiClient,
+    WechatApiError,
+    WechatProtocolError,
+    extract_inbound_aes_key,
+)
 from .state import WechatStateStore
 from .types import (
+    MESSAGE_ITEM_FILE,
+    MESSAGE_ITEM_IMAGE,
+    MESSAGE_ITEM_VIDEO,
+    MESSAGE_ITEM_VOICE,
     MESSAGE_STATE_FINISH,
     MESSAGE_TYPE_BOT,
     MESSAGE_TYPE_USER,
@@ -43,6 +56,138 @@ logger = logging.getLogger(__name__)
 
 _RETRY_INITIAL_S = 1.0
 _RETRY_MAX_S = 20.0
+
+
+def _extract_inbound_cdn_descriptor(
+    item: Dict[str, Any],
+) -> Optional[Tuple[str, str, Any]]:
+    """Return (encrypt_query_param, filename, aes_key) for CDN download."""
+    it = int(item.get("type") or 0)
+    media: Dict[str, Any] = {}
+    parent: Dict[str, Any] = {}
+    filename = "attachment.bin"
+    if it == MESSAGE_ITEM_IMAGE:
+        parent = item.get("image_item") or {}
+        media = parent.get("media") or {}
+        filename = "image.jpg"
+    elif it == MESSAGE_ITEM_VIDEO:
+        parent = item.get("video_item") or {}
+        media = parent.get("media") or {}
+        filename = "video.mp4"
+    elif it == MESSAGE_ITEM_VOICE:
+        parent = item.get("voice_item") or {}
+        if (parent.get("text") or "").strip():
+            return None
+        media = parent.get("media") or {}
+        filename = "voice.bin"
+    elif it == MESSAGE_ITEM_FILE:
+        parent = item.get("file_item") or {}
+        media = parent.get("media") or {}
+        filename = parent.get("file_name") or "attachment.bin"
+    else:
+        return None
+
+    query = media.get("encrypt_query_param")
+    if not query:
+        return None
+    q = str(query).strip()
+    aes_raw = extract_inbound_aes_key(parent, media, item)
+    if aes_raw is None:
+        logger.warning(
+            "wechat inbound CDN item missing aes_key, skip type=%s name=%s",
+            it,
+            filename,
+        )
+        return None
+    return (q, str(filename), aes_raw)
+
+
+def _collect_inbound_cdn_query_info(
+    item_list: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    query_info: Dict[str, Dict[str, Any]] = {}
+    for item in item_list:
+        if not isinstance(item, dict):
+            continue
+        desc = _extract_inbound_cdn_descriptor(item)
+        if desc is None:
+            continue
+        q, filename, aes_raw = desc
+        if q not in query_info:
+            query_info[q] = {
+                "aes_key": aes_raw,
+                "filename": filename,
+            }
+    return query_info
+
+
+def _cdn_part_url_for_type(part: OutgoingContentPart, pt: Any) -> str:
+    if pt == ContentType.IMAGE:
+        return str(getattr(part, "image_url", "") or "")
+    if pt == ContentType.VIDEO:
+        return str(getattr(part, "video_url", "") or "")
+    if pt == ContentType.AUDIO:
+        return str(getattr(part, "data", "") or "")
+    if pt == ContentType.FILE:
+        return str(getattr(part, "file_url", "") or "")
+    return ""
+
+
+def _replace_cdn_part_with_local(
+    part: OutgoingContentPart,
+    *,
+    query_to_path: Dict[str, str],
+    cdn_prefix: str,
+) -> Optional[OutgoingContentPart]:
+    pt = getattr(part, "type", None)
+    url = _cdn_part_url_for_type(part, pt)
+    if pt not in (
+        ContentType.IMAGE,
+        ContentType.VIDEO,
+        ContentType.AUDIO,
+        ContentType.FILE,
+    ):
+        return None
+    if not url.startswith(cdn_prefix):
+        return None
+    q = url[len(cdn_prefix) :]
+    local = query_to_path.get(q)
+    if not local:
+        return None
+
+    result: Optional[OutgoingContentPart] = None
+    if pt == ContentType.IMAGE:
+        result = ImageContent(type=ContentType.IMAGE, image_url=local)
+    elif pt == ContentType.VIDEO:
+        result = VideoContent(type=ContentType.VIDEO, video_url=local)
+    elif pt == ContentType.AUDIO:
+        result = AudioContent(type=ContentType.AUDIO, data=local)
+    elif pt == ContentType.FILE:
+        result = FileContent(
+            type=ContentType.FILE,
+            filename=getattr(part, "filename", None) or "attachment.bin",
+            file_url=local,
+        )
+    return result
+
+
+def _rewrite_cdn_parts_with_local_paths(
+    content_parts: List[OutgoingContentPart],
+    query_to_path: Dict[str, str],
+) -> List[OutgoingContentPart]:
+    cdn_prefix = "wechat://cdn/"
+    out: List[OutgoingContentPart] = []
+    for part in content_parts:
+        replaced = _replace_cdn_part_with_local(
+            part,
+            query_to_path=query_to_path,
+            cdn_prefix=cdn_prefix,
+        )
+        if replaced is not None:
+            out.append(replaced)
+        else:
+            out.append(part)
+    return out
 
 
 class WechatChannel(BaseChannel):
@@ -284,6 +429,49 @@ class WechatChannel(BaseChannel):
             meta=meta,
         )
 
+    async def _materialize_inbound_cdn_media(
+        self,
+        item_list: List[Dict[str, Any]],
+        content_parts: List[OutgoingContentPart],
+    ) -> List[OutgoingContentPart]:
+        """Download wechat://cdn media; replace parts with local paths."""
+        if self._client is None:
+            return content_parts
+
+        query_info = _collect_inbound_cdn_query_info(item_list)
+        if not query_info:
+            return content_parts
+
+        inbound_dir = self._media_dir / "inbound"
+        inbound_dir.mkdir(parents=True, exist_ok=True)
+
+        query_to_path: Dict[str, str] = {}
+        for q, info in query_info.items():
+            try:
+                raw = await self._client.download_cdn_file(
+                    encrypted_query_param=q,
+                    aes_key_b64_or_hex=info["aes_key"],
+                )
+            except (
+                WechatApiError,
+                WechatProtocolError,
+                httpx.HTTPError,
+                ValueError,
+            ) as exc:
+                logger.error("wechat inbound CDN download failed: %s", exc)
+                continue
+            safe_name = Path(info["filename"]).name or "attachment.bin"
+            local_path = inbound_dir / f"{uuid.uuid4().hex}_{safe_name}"
+            local_path.write_bytes(raw)
+            query_to_path[q] = str(local_path.resolve())
+
+        if not query_to_path:
+            return content_parts
+        return _rewrite_cdn_parts_with_local_paths(
+            content_parts,
+            query_to_path,
+        )
+
     async def _poll_loop(self) -> None:
         if self._client is None:
             return
@@ -369,6 +557,10 @@ class WechatChannel(BaseChannel):
         content_parts = message_item_list_to_parts(item_list)
         if not content_parts:
             return
+        content_parts = await self._materialize_inbound_cdn_media(
+            item_list,
+            content_parts,
+        )
 
         context_token = str(message.get("context_token") or "").strip()
         logger.info(
