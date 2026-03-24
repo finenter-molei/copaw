@@ -518,7 +518,6 @@ CoPaw talks to **personal WeChat** through the **OpenClaw (ilink) HTTP JSON API*
 
    ![img.png](img.png)
 
-
 3. After login, **Bot Token** is filled in automatically; confirm **Base URL** matches your ilink gateway.
 4. Save; config is written back and the channel reloads.
 
